@@ -7,19 +7,6 @@ from cryptography.fernet import Fernet
 import getpass
 import sqlite3
 
-#to generate salt run os.urandom(16)
-#or run bcrypt.gensalt()
-
-#def get_encryption_salt():
-#    if os.path.isfile("encryption_salt") == False:
-#        salt = os.urandom(16)
-#        with open("encryption_salt", "wb") as f:
-#            f.write(salt)
-#    else:
-#        with open("encryption_salt", "rb")as f:
-#            salt = f.read()
-#    return salt
-
 #CryptoEngine
 class CryptoEngine:
     def get_key(self, password, salt):
@@ -48,15 +35,15 @@ class CryptoEngine:
         with open(input_file, "rb") as f:
             original_data = f.read()
         encrypted = fernet.encrypt(original_data)
-        with open("encrypted_file", "wb") as f:
+        with open(input_file, "wb") as f:
             f.write(encrypted)
 
-    def decrypt_file(self, key, encrypted_file):
+    def decrypt_file(self, key, input_file):
         fernet = Fernet(key)
-        with open(encrypted_file, "rb") as f:
+        with open(input_file, "rb") as f:
             encrypted_data = f.read()
         decrypted = fernet.decrypt(encrypted_data)
-        with open("decrypted_file", 'wb') as f:
+        with open(input_file, "wb") as f:
             f.write(decrypted)
 
 #DBManager
@@ -70,7 +57,13 @@ class DBManager:
 
     def insert_service_pwd(self, connection, service, pwd):
         connection.execute("INSERT INTO PASSWORDS (SERVICE,PASSWORD) \
-            VALUES (" + str(service) + ", " + str(pwd) + ");")
+            VALUES (" + service + ", " + pwd + ");")
+
+    def db_tostring(self, connection):
+        cursor = connection.execute("SELECT service, password from PASSWORDS")
+        for row in cursor:
+            print("SERVICE = ", row[0])
+            print("PASSWORD = ", row[1])
 
 #UIHandler
 class UIHandler:
@@ -107,7 +100,15 @@ def main():
     if os.path.isfile("salt") == False:
         initialize(connection, crypto_engine, ui_handler)
     else:
-        pass
+        salt = crypto_engine.get_salt()
+        password = ui_handler.get_password("Please enter a password to unlock password_box:")
+
+        key = crypto_engine.get_key(password, salt)
+
+        crypto_engine.decrypt_file(key, "pwd.db")
+
+        database_manager.insert_service_pwd(connection, "github.com", "farts123")
+        database_manager.db_tostring(connection)
 
     connection.close()
 
