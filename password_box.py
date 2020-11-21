@@ -9,7 +9,7 @@ import sqlite3
 
 #CryptoEngine
 class CryptoEngine:
-    def get_key(self, password, salt):
+    def get_key(self, pwd, salt):
         kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -17,7 +17,7 @@ class CryptoEngine:
         iterations=100000,
         backend=default_backend()
         )
-        key = base64.urlsafe_b64encode(kdf.derive(password))
+        key = base64.urlsafe_b64encode(kdf.derive(pwd))
         return key
 
     def generate_salt_file(self):
@@ -30,86 +30,89 @@ class CryptoEngine:
             salt = f.read()
             return salt
 
-    def encrypt_file(self, key, input_file):
+    def encrypt_db(self, key, db_name):
         fernet = Fernet(key)
-        with open(input_file, "rb") as f:
-            original_data = f.read()
-        encrypted = fernet.encrypt(original_data)
-        with open(input_file, "wb") as f:
+        with open(db_name, "rb") as f:
+            data = f.read()
+        encrypted = fernet.encrypt(data)
+        with open(db_name, "wb") as f:
             f.write(encrypted)
 
-    def decrypt_file(self, key, input_file):
+    def decrypt_file(self, key, db_name):
         fernet = Fernet(key)
-        with open(input_file, "rb") as f:
-            encrypted_data = f.read()
-        decrypted = fernet.decrypt(encrypted_data)
-        with open(input_file, "wb") as f:
+        with open(db_name, "rb") as f:
+            data = f.read()
+        decrypted = fernet.decrypt(data)
+        with open(db_name, "wb") as f:
             f.write(decrypted)
+
+    def encode_pwd_string(self, pwd):
+        encoded = pwd.encode()
+        return encoded
 
 #DBManager
 class DBManager:
-    def connect_to_db(self, database_name):
-        connection = sqlite3.connect(database_name)
+    def get_db_connection(self, db_name):
+        connection = sqlite3.connect(db_name)
         return connection
 
     def close_db_connection(self, connection):
         connection.close()
 
-    def insert_service_pwd(self, connection, service, pwd):
-        connection.execute("INSERT INTO PASSWORDS (SERVICE,PASSWORD) \
-            VALUES (" + service + ", " + pwd + ");")
+    def get_db_cursor(self, connection):
+        cursor = connection.cursor()
+        return cursor
+    
+    def make_pwd_table(self, cursor):
+        cursor.execute('''CREATE TABLE passwords (service text, pwd text)''')
+    
+    def insert_pwd(self, cursor, service, pwd):
+        temp_tuple = (service, pwd)
+        cursor.execute("INSERT INTO passwords VALUES (?, ?)", temp_tuple)
 
-    def db_tostring(self, connection):
-        cursor = connection.execute("SELECT service, password from PASSWORDS")
-        for row in cursor:
-            print("SERVICE = ", row[0])
-            print("PASSWORD = ", row[1])
+    def commit_changes(self, connection):
+        connection.commit()
+
+    def get_pwd_from_table(self, cursor, service):
+        temp_tuple = (service,)
+        cursor.execute("SELECT pwd FROM passwords WHERE service=?", temp_tuple)
+        pwd_tuple = cursor.fetchone()
+        pwd, = pwd_tuple
+        return pwd
 
 #UIHandler
 class UIHandler:
-    def get_password(self, output_string):
-        user_input = getpass.getpass(output_string)
-        password = user_input.encode()
-        return password
+    def get_pwd_from_user(self, output_string):
+        pwd = getpass.getpass(output_string)
+        return pwd
 
-#Initialize
-def initialize(connection, cryptoengine, uihandler):
-    connection.execute("""CREATE TABLE PASSWORDS
-                    (SERVICE    TEXT    NOT NULL,
-                    PASSWORD    TEXT    NOT NULL);""")
+    def get_input_from_user(self, output_string):
+        user_input = input(output_string)
+        return user_input
 
-    cryptoengine.generate_salt_file()
+def initialize():
+    pass
 
-    salt = cryptoengine.get_salt()
-    password = uihandler.get_password("Please enter a password to setup password_box:")
-
-    key = cryptoengine.get_key(password, salt)
-
-    cryptoengine.encrypt_file(key, "pwd.db") 
-
-    print("Database has been initialized and encrypted. Please restart password_box.")
-
-#Main
 def main():
-    database_manager = DBManager()
-    crypto_engine = CryptoEngine()
-    ui_handler = UIHandler()
+    dbmanager = DBManager()
+    uihandler = UIHandler()
+    cryptoengine = CryptoEngine()
 
-    connection = database_manager.connect_to_db("pwd.db")
-
-    if os.path.isfile("salt") == False:
-        initialize(connection, crypto_engine, ui_handler)
+    if (os.path.isfile("pwd.db")) and (os.path.isfile("salt")):
+        pass
     else:
-        salt = crypto_engine.get_salt()
-        password = ui_handler.get_password("Please enter a password to unlock password_box:")
+        initialize()
 
-        key = crypto_engine.get_key(password, salt)
-
-        crypto_engine.decrypt_file(key, "pwd.db")
-
-        database_manager.insert_service_pwd(connection, "github.com", "farts123")
-        database_manager.db_tostring(connection)
-
-    connection.close()
-
-main()
+#Start of Test
+#dbmanager = DBManager()
+#uihandler = UIHandler()
+#connection = dbmanager.get_db_connection("pwd.db")
+#c = dbmanager.get_db_cursor(connection)
+#dbmanager.make_pwd_table(c)
+#service = uihandler.get_input_from_user("Please provide the service you would like to add: ")
+#pwd = uihandler.get_pwd_from_user("Please provide the password you would like to add: ")
+#dbmanager.insert_pwd(c, service, pwd)
+#dbmanager.commit_changes(connection)
+#print(dbmanager.get_pwd_from_table(c, "github"))
+#dbmanager.close_db_connection(c)
+#End of Test
