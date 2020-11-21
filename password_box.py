@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
 import getpass
 import sqlite3
+import random
 
 #CryptoEngine
 class CryptoEngine:
@@ -49,6 +50,35 @@ class CryptoEngine:
     def encode_pwd_string(self, pwd):
         encoded = pwd.encode()
         return encoded
+
+#PWDGenerator
+class PWDGenerator:
+    def __init__(self, lowerbool, upperbool, numsbool, symsbool, length):
+        self.lowerbool = lowerbool
+        self.upperbool = upperbool
+        self.numsbool = numsbool
+        self.symsbool = symsbool
+        self.length = length
+
+        lowercase = "abcdefghijklmnopqrstuvwxyz"
+        uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        numbers = "0123456789"
+        symbols = "!@#$%&*"
+
+        self.pool = ""
+
+        if lowerbool:
+            self.pool += lowercase
+        if upperbool:
+            self.pool += uppercase
+        if numsbool:
+            self.pool += numbers
+        if symsbool:
+            self.pool += symbols
+
+    def generate(self):
+        pwd = "".join(random.sample(self.pool, self.length))
+        return pwd
 
 #DBManager
 class DBManager:
@@ -115,4 +145,9 @@ def main():
 #dbmanager.commit_changes(connection)
 #print(dbmanager.get_pwd_from_table(c, "github"))
 #dbmanager.close_db_connection(c)
+#End of Test
+
+#Start of Test
+#pwdgenerator = PWDGenerator(True, True, True, True, 32)
+#print(pwdgenerator.generate())
 #End of Test
