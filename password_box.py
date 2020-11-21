@@ -39,7 +39,7 @@ class CryptoEngine:
         with open(db_name, "wb") as f:
             f.write(encrypted)
 
-    def decrypt_file(self, key, db_name):
+    def decrypt_db(self, key, db_name):
         fernet = Fernet(key)
         with open(db_name, "rb") as f:
             data = f.read()
@@ -53,31 +53,22 @@ class CryptoEngine:
 
 #PWDGenerator
 class PWDGenerator:
-    def __init__(self, lowerbool, upperbool, numsbool, symsbool, length):
-        self.lowerbool = lowerbool
-        self.upperbool = upperbool
-        self.numsbool = numsbool
-        self.symsbool = symsbool
-        self.length = length
+    lowercase = "abcdefghijklmnopqrstuvwxyz"
+    uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    numbers = "0123456789"
+    symbols = "!@#$%&*"
 
-        lowercase = "abcdefghijklmnopqrstuvwxyz"
-        uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        numbers = "0123456789"
-        symbols = "!@#$%&*"
-
-        self.pool = ""
-
+    def generate(self, lowerbool, upperbool, numsbool, symsbool, length):
+        pool = ""
         if lowerbool:
-            self.pool += lowercase
+            pool += self.lowercase
         if upperbool:
-            self.pool += uppercase
+            pool += self.uppercase
         if numsbool:
-            self.pool += numbers
+            pool += self.numbers
         if symsbool:
-            self.pool += symbols
-
-    def generate(self):
-        pwd = "".join(random.sample(self.pool, self.length))
+            pool += self.symbols
+        pwd = "".join(random.sample(pool, length))
         return pwd
 
 #DBManager
@@ -120,34 +111,79 @@ class UIHandler:
         user_input = input(output_string)
         return user_input
 
-def initialize():
-    pass
-
 def main():
     dbmanager = DBManager()
     uihandler = UIHandler()
     cryptoengine = CryptoEngine()
 
     if (os.path.isfile("pwd.db")) and (os.path.isfile("salt")):
-        pass
+        pwd = uihandler.get_pwd_from_user("Please enter your master password to decrypt your password database:")
+        encoded_pwd = cryptoengine.encode_pwd_string(pwd)
+        key = cryptoengine.get_key(encoded_pwd, cryptoengine.get_salt())
+        cryptoengine.decrypt_db(key, "pwd.db")
+        connection = dbmanager.get_db_connection("pwd.db")
+        cursor = dbmanager.get_db_cursor(connection)
+        while True:
+            print(" _____Main Menu_______________________________________")
+            print("|                                                     |")
+            print("| 1 - Get a saved password from the password database |")
+            print("| 2 - Add a password to the password database         |")
+            print("| 0 - Encrypt password database and exit              |")
+            print("|                                                     |")
+            print(" -----------------------------------------------------")
+            selection = uihandler.get_input_from_user("Please enter the number of the action you would like to take: ")
+            if selection == "0":
+                dbmanager.commit_changes(connection)
+                dbmanager.close_db_connection(connection)
+                cryptoengine.encrypt_db(key, "pwd.db")
+                return False
+            if selection == "1":
+                service = uihandler.get_input_from_user("Please enter the name of the service you would like the password for: ")
+                result_pwd = dbmanager.get_pwd_from_table(cursor, service)
+                print("The password for " + service + " is " + result_pwd)
+                return True
+            if selection == "2":
+                new_service = uihandler.get_input_from_user("Please enter the name of the service you would like to add: ")
+                pwd_option = uihandler.get_pwd_from_user("Please enter 0 if you would like password_box to generate a strong password.\nAlternatively, enter 1 if you would like to manually supply the password.")
+                if pwd_option == "0":
+                    pwdgenerator = PWDGenerator()
+                    length = uihandler.get_input_from_user("Please enter the desired length of the password: ")
+                    use_upper = uihandler.get_input_from_user("Should the password include uppercase in addition to lowercase letters (y or n)? ")
+                    use_nums = uihandler.get_input_from_user("Should the password also include numbers (y or n)? ")
+                    use_syms = uihandler.get_input_from_user("Should the password also include special symbols (y or n)? ")
+                    upperbool, numsbool, symsbool = False, False, False
+                    if use_upper == "y":
+                        upperbool = True
+                    if use_nums == "y":
+                        numsbool = True
+                    if use_syms == "y":
+                        symsbool = True
+                    new_pwd = pwdgenerator.generate(True, upperbool, numsbool, symsbool, length)
+                if pwd_option == "1":
+                    new_pwd = uihandler.get_pwd_from_user("Please enter the password to be used for " + new_service + ":")
+                dbmanager.insert_pwd(cursor, new_service, new_pwd)
+                return True
     else:
-        initialize()
+        connection = dbmanager.get_db_connection("pwd.db") #Get connection and create pwd.db database file
+        cursor = dbmanager.get_db_cursor(connection) #Get cursor object
+        dbmanager.make_pwd_table(cursor) #Create passwords table in pwd.db
+        dbmanager.commit_changes(connection) #Commit changes to pwd.db
+        dbmanager.close_db_connection(connection) #Close connection to pwd.db
 
-#Start of Test
-#dbmanager = DBManager()
-#uihandler = UIHandler()
-#connection = dbmanager.get_db_connection("pwd.db")
-#c = dbmanager.get_db_cursor(connection)
-#dbmanager.make_pwd_table(c)
-#service = uihandler.get_input_from_user("Please provide the service you would like to add: ")
-#pwd = uihandler.get_pwd_from_user("Please provide the password you would like to add: ")
-#dbmanager.insert_pwd(c, service, pwd)
-#dbmanager.commit_changes(connection)
-#print(dbmanager.get_pwd_from_table(c, "github"))
-#dbmanager.close_db_connection(c)
-#End of Test
+        cryptoengine.generate_salt_file() #Create salt file
 
-#Start of Test
-#pwdgenerator = PWDGenerator(True, True, True, True, 32)
-#print(pwdgenerator.generate())
-#End of Test
+        #Get user to input a master password for their password database 
+        pwd = uihandler.get_pwd_from_user("Please enter a master password to encrypt your password database:")
+
+        encoded_pwd = cryptoengine.encode_pwd_string(pwd) #Encode the string pwd to bytes
+
+        key = cryptoengine.get_key(encoded_pwd, cryptoengine.get_salt()) #Generate master key
+
+        cryptoengine.encrypt_db(key, "pwd.db") #Encrypt pwd.db
+
+        print("Password_box has been initialized.")
+        print("Please remember your master password.")
+        print("It will be required to decrypt your password database.")
+        print("Please restart the program to start using password_box.")
+
+main()
