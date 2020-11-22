@@ -68,7 +68,8 @@ class PWDGenerator:
             pool += self.numbers
         if symsbool:
             pool += self.symbols
-        pwd = "".join(random.sample(pool, length))
+        length_int = int(length)
+        pwd = "".join(random.sample(pool, length_int))
         return pwd
 
 #DBManager
@@ -101,6 +102,11 @@ class DBManager:
         pwd, = pwd_tuple
         return pwd
 
+    ### New Additions for Tonight 11/21/20 ###
+    def delete_from_table(self, cursor, service):
+        temp_tuple = (service,)
+        cursor.execute("DELETE FROM passwords WHERE service=?", temp_tuple)
+
 #UIHandler
 class UIHandler:
     def get_pwd_from_user(self, output_string):
@@ -123,11 +129,13 @@ def main():
         cryptoengine.decrypt_db(key, "pwd.db")
         connection = dbmanager.get_db_connection("pwd.db")
         cursor = dbmanager.get_db_cursor(connection)
-        while True:
+        loop_token = 1
+        while loop_token == 1:
             print(" _____Main Menu_______________________________________")
             print("|                                                     |")
             print("| 1 - Get a saved password from the password database |")
             print("| 2 - Add a password to the password database         |")
+            print("| 3 - Delete a password from the password database    |")
             print("| 0 - Encrypt password database and exit              |")
             print("|                                                     |")
             print(" -----------------------------------------------------")
@@ -136,12 +144,11 @@ def main():
                 dbmanager.commit_changes(connection)
                 dbmanager.close_db_connection(connection)
                 cryptoengine.encrypt_db(key, "pwd.db")
-                return False
+                loop_token = 0
             if selection == "1":
                 service = uihandler.get_input_from_user("Please enter the name of the service you would like the password for: ")
                 result_pwd = dbmanager.get_pwd_from_table(cursor, service)
                 print("The password for " + service + " is " + result_pwd)
-                return True
             if selection == "2":
                 new_service = uihandler.get_input_from_user("Please enter the name of the service you would like to add: ")
                 pwd_option = uihandler.get_pwd_from_user("Please enter 0 if you would like password_box to generate a strong password.\nAlternatively, enter 1 if you would like to manually supply the password.")
@@ -162,7 +169,9 @@ def main():
                 if pwd_option == "1":
                     new_pwd = uihandler.get_pwd_from_user("Please enter the password to be used for " + new_service + ":")
                 dbmanager.insert_pwd(cursor, new_service, new_pwd)
-                return True
+            if selection == "3":
+                service_to_del = uihandler.get_input_from_user("Please enter the service to delete: ")
+                dbmanager.delete_from_table(cursor, service_to_del)
     else:
         connection = dbmanager.get_db_connection("pwd.db") #Get connection and create pwd.db database file
         cursor = dbmanager.get_db_cursor(connection) #Get cursor object
@@ -181,9 +190,13 @@ def main():
 
         cryptoengine.encrypt_db(key, "pwd.db") #Encrypt pwd.db
 
-        print("Password_box has been initialized.")
-        print("Please remember your master password.")
-        print("It will be required to decrypt your password database.")
-        print("Please restart the program to start using password_box.")
+        print(" _________________________________________________________")
+        print("|                                                         |")
+        print("| Password_box has been initialized.                      |")
+        print("| Please remember your master password.                   |")
+        print("| It will be required to decrypt your password database.  |")
+        print("| Please restart the program to start using password_box. |")
+        print("|                                                         |")
+        print(" ---------------------------------------------------------")
 
 main()
